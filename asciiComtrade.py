@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os.path as op
 import struct
+import pandas as pd
 
 class AnalogInfo:
 
@@ -140,7 +141,7 @@ class ComtradeConfig:
             return
         else:
             self.result = 'parsing'
-        f = open(self.path)
+        f = open(self.path, encoding='utf8',errors='ignore')
         lines = f.readlines()
         f.close()
         del f
@@ -177,7 +178,6 @@ class ComtradeConfig:
         index += 1
         self.timemult = float(infoStrs[index])
         self.result = 'parsed'
-        print("parsed done")
 
     def _removeNextline(self, strList):
         result = []
@@ -191,7 +191,6 @@ class ComtradeData:
         self.result = 'none'
         pathList = config.path.split('.')
         self.path = pathList[0] + '.dat'
-        print(self.path)
         if config.result != 'parsed':
             print("data not parsed") 
             return
@@ -201,42 +200,21 @@ class ComtradeData:
             return
         else:
             self.result = 'parsing'
-        datFile = open(self.path, 'rb')
-        data = datFile.read()
-        size = datFile.tell()
-        datFile.close()
-        del datFile
+
         analogChNum = config.channelInfo.analog
         digitalChNum = config.channelInfo.digital
-        analogBytesLen = 2 * analogChNum
-        digitalBytesLen = 0
-        if digitalChNum % 16 != 0:
-            digitalBytesLen =  2 * ((digitalChNum // 16) + 1)
-        else:
-            digitalBytesLen = 2 * (digitalChNum // 16)
-        self.unitSize = 4 + 4 + digitalBytesLen + analogBytesLen
+        total = config.channelInfo.tt
         self.sampleCount = config.sampleInfo[0].end
         self.deltaT = 1.0 / config.sampleInfo[0].rate
         self.config = config
-        for i in range(0, self.sampleCount):
-            analogIndex = i * self.unitSize + 8
-            for ch in range(0, analogChNum):
-                index = ch * 2 + analogIndex
-                raw = struct.unpack('h', data[index:index+2])[0]
-                self.config.analogInfo[ch].appendData(raw)
-            digitalIndex = i * self.unitSize + 8 + analogBytesLen
-            for ch in range(0, digitalChNum):
-                index = (ch // 16) * 2 + digitalIndex
-                raw = struct.unpack('h', data[index:index+2])[0] 
-                self.config.digitalInfo[ch].appendData(raw)
-        self._analog = {}
-        self._digital = {}
-        for each in self.config.analogInfo:
-            self._analog[each.ch_id + '(%s)' % each.uu] = each.data()
-        for each in self.config.digitalInfo:
-            self._digital[each.ch_id] = each.data()
+        
+        data = pd.read_table(self.path, sep = ',', header = None)
+
+        self.analogData = data.iloc[:, 2 : analogChNum + 2]
+        self.digitalData = data.iloc[:, analogChNum + 2 : total + 2]
+        
         self.result = 'parsed'
-        print("Done")
+        print("ASCII File Parsed Done")
 
     def t(self):
         if self.result == 'parsed':
@@ -246,13 +224,13 @@ class ComtradeData:
 
     def analog(self):
         if self.result == 'parsed':
-            return self._analog
+            return self.analogData
         else:
             return {}
     
     def digital(self):
         if self.result == 'parsed':
-            return self._digital
+            return self.digitalData
         else:
             return {}
 
@@ -260,16 +238,15 @@ class ComtradeParser:
 
     def __init__(self, path):
         self.result = 'none'
-        if not '.cfg' in path:
-            if not '.dat' in path:
+        if not '.cfg' in path.lower():
+            if not '.dat' in path.lower():
                 self.result = 'not a comtrade file: %s' % path
-                return
+                return print('No files')
             else:
-                path = path.replace('.dat', '')
+                path = path.lower().replace('.dat', '')
         else:
-            path = path.replace('.cfg', '')
+            path = path.lower().replace('.cfg', '')
         self.path = path
-        print(path)
         self.result = 'parsing'
         self.config = ComtradeConfig(self.path + '.cfg')
         self.dat = ComtradeData(self.config)
@@ -279,78 +256,17 @@ class ComtradeParser:
         self.t = self.dat.t()
         self.fs = self.config.sampleInfo[0].rate
 
-    def _savecsvdata(self, filePath , chtype='analog'):
-        chtype = chtype.lower()
+    def _savecsvdata(self, chtype = 'analog'):
         if chtype == 'analog':
-            rawdict = self.analog
-        elif chtype == 'digital':
-            rawdict = self.digital
-        else:
-            rawdict = dict(self.analog, **self.digital)
-        datalist = list(rawdict.values())
-        datamatrix = np.array(datalist)
-        csvdata = datamatrix.transpose()
-        np.savetxt(filePath, csvdata, fmt='%.2f', delimiter=',')
-        f = open(filePath, 'r')
-        lines = f.readlines()
-        f.close()
-        tablehead = ','.join(rawdict.keys()) + '\n'
-        lines.insert(0, tablehead)
-        f = open(filePath, 'w')
-        f.writelines(lines)
-        f.close()
+            data = self.analog
+        else: 
+            data = self.digital
+        
+        data = data[:100]
+        data = data.T
+        return data
 
-    def show(self):
+        
 
-        if self.result == 'parsed':
-            plt.show()
-
-    def savefig(self, figFormat='pdf'):
- 
-        if self.result == 'parsed':
-            figName = self.path + '_' \
-                    + '.' + figFormat
-            if figFormat == 'png':
-                plt.savefig(figName, dpi=300)
-            elif figFormat == 'csv':
-                self._savecsvdata(figName, self.plotchannel)
-            else:
-                plt.savefig(figName)
-
-    def plot(self, chType='analog'):
-
-        if self.result == 'parsed':
-            data = {}
-            title = ''
-            self.plotchannel = chType.upper()
-            if chType == 'analog':
-                data = self.analog
-                temp = self.path.split('/')[-1]
-                title = temp + 'digital data'
-            elif chType == 'digital':
-                data = self.digital
-                temp = self.path.split('/')[-1]
-                title = temp + 'analog data'
-            else:
-                data = dict(self.analog, **self.digital)
-                temp = self.path.split('/')[-1]
-                title = temp + 'all'
-            count = len(data)
-            row = count // 2 + (count % 2)
-            column = 2
-            plt.close('all')
-            plt.figure(figsize=(16, count*1))
-            plt.suptitle(title)
-            subplotN = 1
-            for key, data in data.items():
-                plt.subplot(row, column, subplotN)
-                subplotN += 1
-                plt.plot(self.t, data, label=key) 
-                plt.legend()
-
-if __name__ == "__main__":
-    parser = ComtradeParser('/Users/miezai/Desktop/waveClassifier/data/test.cfg')
-    parser._savecsvdata('/Users/miezai/Desktop/waveClassifier/data/data.csv')
-    parser.plot
-    parser.show
+    #parser._savecsvdata('/Users/miezai/Desktop/waveClassifier/data/ascii.csv')
 
