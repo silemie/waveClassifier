@@ -69,10 +69,8 @@ class FileInfo:
         self.str = infoStr.replace('\n', '')
         buf = self.str.split(',')
         self.station_name = buf[0]
-        self.rec_dev_id = int(buf[1])
         self.rev_year = buf[2]
         self.str = 'Station name:%s\n' % self.station_name
-        self.str += 'ID:%d\n' % self.rec_dev_id
         self.str += 'IEEE Std C37.111-%s COMTRADE' % self.rev_year
     def __repr__(self):
         return self.str
@@ -189,8 +187,7 @@ class ComtradeData:
 
     def __init__(self, config):
         self.result = 'none'
-        pathList = config.path.split('.')
-        self.path = pathList[0] + '.dat'
+        self.path = config.path.replace('cfg', 'dat')
         if config.result != 'parsed':
             print("data not parsed") 
             return
@@ -300,7 +297,7 @@ class ComtradeParser:
         f.close()
         del f
         data = pd.read_csv(filePath)
-        data = data[:100]
+        data = data.iloc[:100]
         data = data.T
         
         return data
