@@ -297,7 +297,7 @@ class ComtradeParser:
         f.close()
         del f
         data = pd.read_csv(filePath)
-        data = data.iloc[:100]
+        data = data.iloc[:200]
         data = data.T
         
         return data

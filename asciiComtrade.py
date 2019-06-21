@@ -259,7 +259,7 @@ class ComtradeParser:
         else: 
             data = self.digital
         
-        data = data.iloc[:100]
+        data = data.iloc[:200]
         data = data.T
         return data
 

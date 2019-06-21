@@ -42,7 +42,7 @@ def loadPath(path):
 if __name__ == "__main__":
     path = '/Users/miezai/Desktop/异常波形/'
     d = loadPath(path)
-    d.to_csv('data.csv')
+    d.to_csv('abnormal.csv')
     
 
 
